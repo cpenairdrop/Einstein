@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayFlow - Modern Fintech Payment Gateway</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f8fbff 0%, #f0f7ff 100%);
+            min-height: 100vh;
+        }
+
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(59, 130, 246, 0.1);
+        }
+
+        .soft-shadow {
+            box-shadow: 0 10px 40px rgba(59, 130, 246, 0.08);
+        }
+
+        .blue-glow {
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.15), 0 10px 40px rgba(59, 130, 246, 0.08);
+        }
+
+        .crypto-glow {
+            box-shadow: 0 0 25px rgba(245, 158, 11, 0.2), 0 10px 35px rgba(245, 158, 11, 0.1);
+        }
+
+        .bank-glow {
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.2), 0 10px 35px rgba(59, 130, 246, 0.1);
+        }
+
+        .transition-smooth {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .button-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 45px rgba(59, 130, 246, 0.25);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 50px rgba(59, 130, 246, 0.15);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .slide-in {
+            animation: slideIn 0.4s ease-out forwards;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .pulse-slow {
+            animation: pulseSlow 3s ease-in-out infinite;
+        }
+
+        @keyframes pulseSlow {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .input-focus {
+            transition: all 0.3s ease;
+        }
+
+        .input-focus:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .timer {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .payment-badge {
+            animation: wiggle 2s ease-in-out infinite;
+        }
+
+        @keyframes wiggle {
+            0%, 100% {
+                transform: translateX(0);
+            }
+            25% {
+                transform: translateX(-2px);
+            }
+            75% {
+                transform: translateX(2px);
+            }
+        }
+
+        .hidden-input {
+            position: absolute;
+            left: -9999px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+        // State Management
+        const state = {
+            currentPage: 'deposit', // 'deposit', 'payment-method', 'crypto', 'bank'
+            formData: {
+                fullName: '',
+                email: '',
+                amount: '',
+                phone: ''
+            },
+            selectedPaymentMethod: null,
+            timeLeft: 900, // 15 minutes countdown
+            copyFeedback: {}
+        };
+
+        // Utility Functions
+        const copyToClipboard = (text, feedbackId) => {
+            navigator.clipboard.writeText(text).then(() => {
+                state.copyFeedback[feedbackId] = true;
+                render();
+                setTimeout(() => {
+                    state.copyFeedback[feedbackId] = false;
+                    render();
+                }, 2000);
+            });
+        };
+
+        const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('en-NG', {
+                style: 'currency',
+                currency: 'NGN',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(amount);
+        };
+
+        const formatTime = (seconds) => {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        };
+
+        const generateVirtualAccount = () => {
+            return {
+                bankName: 'Demo Bank',
+                accountNumber: '1234567890',
+                accountName: 'Demo Payment Gateway',
+                amount: state.formData.amount
+            };
+        };
+
+        const validateEmail = (email) => {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        };
+
+        // Event Handlers
+        const handleInputChange = (field, value) => {
+            state.formData[field] = value;
+            render();
+        };
+
+        const handleContinueDeposit = () => {
+            const { fullName, email, amount, phone } = state.formData;
+            
+            if (!fullName.trim()) {
+                alert('Please enter your full name');
+                return;
+            }
+            if (!validateEmail(email)) {
+                alert('Please enter a valid email address');
+                return;
+            }
+            if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+                alert('Please enter a valid amount');
+                return;
+            }
+            if (!phone.trim() || phone.length < 10) {
+                alert('Please enter a valid phone number');
+                return;
+            }
+
+            state.currentPage = 'payment-method';
+            render();
+        };
+
+        const handleSelectPayment = (method) => {
+            state.selectedPaymentMethod = method;
+            state.currentPage = method === 'crypto' ? 'crypto' : 'bank';
+            state.timeLeft = 900;
+            render();
+            
+            // Start countdown timer
+            if (window.countdownInterval) clearInterval(window.countdownInterval);
+            window.countdownInterval = setInterval(() => {
+                state.timeLeft--;
+                if (state.timeLeft <= 0) {
+                    clearInterval(window.countdownInterval);
+                    state.timeLeft = 0;
+                }
+                render();
+            }, 1000);
+        };
+
+        const handleBackToPaymentMethod = () => {
+            state.currentPage = 'payment-method';
+            state.selectedPaymentMethod = null;
+            if (window.countdownInterval) clearInterval(window.countdownInterval);
+            render();
+        };
+
+        const handleBackToDeposit = () => {
+            state.currentPage = 'deposit';
+            state.selectedPaymentMethod = null;
+            if (window.countdownInterval) clearInterval(window.countdownInterval);
+            render();
+        };
+
+        const handleGenerateQR = () => {
+            const qrContainer = document.getElementById('qr-code-container');
+            if (qrContainer) {
+                qrContainer.innerHTML = '';
+                new QRCode(qrContainer, {
+                    text: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+                    width: 200,
+                    height: 200,
+                    colorDark: '#3b82f6',
+                    colorLight: '#ffffff'
+                });
+            }
+        };
+
+        // UI Components
+        const DepositPage = () => `
+            <div class="min-h-screen flex items-center justify-center px-4 py-8">
+                <div class="w-full max-w-md fade-in">
+                    <!-- Header -->
+                    <div class="text-center mb-8">
+                        <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100 mb-4">
+                            <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">PayFlow</h1>
+                        <p class="text-gray-600">Secure Payment Gateway</p>
+                    </div>
+
+                    <!-- Form Card -->
+                    <div class="soft-shadow rounded-2xl glass-effect p-8 mb-6">
+                        <!-- Full Name -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
+                            <input 
+                                type="text" 
+                                placeholder="John Doe"
+                                value="${state.formData.fullName}"
+                                onchange="handleInputChange('fullName', this.value)"
+                                class="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 input-focus text-gray-900 placeholder-gray-500"
+                            />
+                        </div>
+
+                        <!-- Email Address -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                            <input 
+                                type="email" 
+                                placeholder="john@example.com"
+                                value="${state.formData.email}"
+                                onchange="handleInputChange('email', this.value)"
+                                class="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 input-focus text-gray-900 placeholder-gray-500"
+                            />
+                        </div>
+
+                        <!-- Amount -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Amount to Deposit (₦)</label>
+                            <div class="relative">
+                                <span class="absolute left-4 top-3 text-gray-500 font-semibold">₦</span>
+                                <input 
+                                    type="number" 
+                                    placeholder="50,000"
+                                    value="${state.formData.amount}"
+                                    onchange="handleInputChange('amount', this.value)"
+                                    class="w-full pl-8 pr-4 py-3 rounded-lg border border-gray-200 bg-gray-50 input-focus text-gray-900 placeholder-gray-500"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Phone Number -->
+                        <div class="mb-8">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
+                            <input 
+                                type="tel" 
+                                placeholder="+234 800 000 0000"
+                                value="${state.formData.phone}"
+                                onchange="handleInputChange('phone', this.value)"
+                                class="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 input-focus text-gray-900 placeholder-gray-500"
+                            />
+                        </div>
+
+                        <!-- Security Notice -->
+                        <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-8 flex items-start gap-3">
+                            <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            <div>
+                                <p class="text-sm font-semibold text-blue-900">Secure & Encrypted</p>
+                                <p class="text-xs text-blue-700 mt-1">Your payment information is fully encrypted and secure</p>
+                            </div>
+                        </div>
+
+                        <!-- Continue Button -->
+                        <button 
+                            onclick="handleContinueDeposit()"
+                            class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-6 rounded-lg transition-smooth button-hover flex items-center justify-center gap-2"
+                        >
+                            <span>Continue to Payment</span>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Footer Info -->
+                    <div class="text-center text-sm text-gray-600">
+                        <p>💳 Multiple Payment Methods Available</p>
+                        <p class="mt-1">✨ Instant Processing</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const PaymentMethodPage = () => `
+            <div class="min-h-screen flex items-center justify-center px-4 py-8">
+                <div class="w-full max-w-2xl fade-in">
+                    <!-- Header -->
+                    <div class="mb-8">
+                        <button 
+                            onclick="handleBackToDeposit()"
+                            class="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 transition-smooth mb-6"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                            Back
+                        </button>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">Select Payment Method</h1>
+                        <p class="text-gray-600">Choose your preferred way to complete this payment</p>
+                    </div>
+
+                    <!-- Payment Method Cards -->
+                    <div class="grid md:grid-cols-2 gap-6 mb-8">
+                        <!-- Crypto Payment -->
+                        <div 
+                            onclick="handleSelectPayment('crypto')"
+                            class="card-hover cursor-pointer soft-shadow rounded-2xl glass-effect p-8 border-2 border-transparent hover:border-blue-300 transition-smooth"
+                        >
+                            <div class="flex items-center gap-4 mb-6">
+                                <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center">
+                                    <svg class="w-8 h-8 text-orange-600" fill="currentColor" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                                        <text x="12" y="15" text-anchor="middle" font-size="12" font-weight="bold" fill="currentColor">₿</text>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-900">Cryptocurrency</h3>
+                                    <p class="text-sm text-gray-600">Bitcoin, Ethereum & USDT</p>
+                                </div>
+                            </div>
+                            <ul class="space-y-3 mb-6">
+                                <li class="flex items-center gap-3 text-sm text-gray-700">
+                                    <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Instant Settlement
+                                </li>
+                                <li class="flex items-center gap-3 text-sm text-gray-700">
+                                    <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Low Fees
+                                </li>
+                                <li class="flex items-center gap-3 text-sm text-gray-700">
+                                    <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Global Access
+                                </li>
+                            </ul>
+                            <button class="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-2 px-4 rounded-lg transition-smooth">
+                                Use Crypto
+                            </button>
+                        </div>
+
+                        <!-- Bank Transfer -->
+                        <div 
+                            onclick="handleSelectPayment('bank')"
+                            class="card-hover cursor-pointer soft-shadow rounded-2xl glass-effect p-8 border-2 border-transparent hover:border-blue-300 transition-smooth"
+                        >
+                            <div class="flex items-center gap-4 mb-6">
+                                <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+                                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h10m4 0a1 1 0 11-2 0m2 0a1 1 0 10-2 0m-4 0a1 1 0 11-2 0m2 0a1 1 0 10-2 0M3 21h18"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-900">Bank Transfer</h3>
+                                    <p class="text-sm text-gray-600">Nigerian Bank Account</p>
+                                </div>
+                            </div>
+                            <ul class="space-y-3 mb-6">
+                                <li class="flex items-center gap-3 text-sm text-gray-700">
+                                    <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Direct Transfer
+                                </li>
+                                <li class="flex items-center gap-3 text-sm text-gray-700">
+                                    <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Familiar & Easy
+                                </li>
+                                <li class="flex items-center gap-3 text-sm text-gray-700">
+                                    <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Instant Confirmation
+                                </li>
+                            </ul>
+                            <button class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2 px-4 rounded-lg transition-smooth">
+                                Use Bank Transfer
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Info Box -->
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                        <p class="text-sm text-gray-600 mb-2">Payment Amount</p>
+                        <p class="text-3xl font-bold gradient-text">${formatCurrency(parseFloat(state.formData.amount) || 0)}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const CryptoPaymentPage = () => `
+            <div class="min-h-screen flex items-center justify-center px-4 py-8">
+                <div class="w-full max-w-2xl fade-in">
+                    <!-- Header -->
+                    <div class="mb-8">
+                        <button 
+                            onclick="handleBackToPaymentMethod()"
+                            class="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 transition-smooth mb-6"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                            Back to Payment Methods
+                        </button>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">Cryptocurrency Payment</h1>
+                        <p class="text-gray-600">Send your payment to one of the wallet addresses below</p>
+                    </div>
+
+                    <!-- Timer & Status -->
+                    <div class="mb-8 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="relative w-12 h-12">
+                                <svg class="w-12 h-12" viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="12" r="11" stroke="#dbeafe" stroke-width="2"></circle>
+                                    <circle cx="12" cy="12" r="11" stroke="url(#gradient)" stroke-width="2" stroke-dasharray="69.11" stroke-dashoffset="0" style="animation: rotate 2s linear infinite;"></circle>
+                                    <defs>
+                                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                            <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                <span class="absolute inset-0 flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                    </svg>
+                                </span>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-700">Waiting for Payment</p>
+                                <p class="text-xs text-gray-500">Payment pending</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-gray-500 mb-1">Time Remaining</p>
+                            <p class="text-2xl font-bold text-blue-600 timer">${formatTime(state.timeLeft)}</p>
+                        </div>
+                    </div>
+
+                    <!-- Crypto Coins Grid -->
+                    <div class="grid md:grid-cols-3 gap-6 mb-8">
+                        <!-- Bitcoin -->
+                        <div class="crypto-glow rounded-2xl glass-effect p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="font-bold text-gray-900">Bitcoin</h3>
+                                <span class="text-2xl">₿</span>
+                            </div>
+                            <p class="text-xs text-gray-600 mb-4 font-mono text-center break-all">bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq</p>
+                            <button 
+                                onclick="copyToClipboard('bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', 'btc'); handleGenerateQR();"
+                                class="w-full text-sm font-semibold text-blue-600 hover:text-blue-700 py-2 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-smooth mb-3"
+                            >
+                                ${state.copyFeedback['btc'] ? '✓ Copied' : 'Copy Address'}
+                            </button>
+                            <div id="qr-code-container" class="flex justify-center mb-3"></div>
+                            <p class="text-xs text-center text-gray-600">Amount: 0.015 BTC</p>
+                        </div>
+
+                        <!-- Ethereum -->
+                        <div class="crypto-glow rounded-2xl glass-effect p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="font-bold text-gray-900">Ethereum</h3>
+                                <span class="text-2xl">Ξ</span>
+                            </div>
+                            <p class="text-xs text-gray-600 mb-4 font-mono text-center break-all">0x742d35Cc6634C0532925a3b844Bc57e4c6b1e29b</p>
+                            <button 
+                                onclick="copyToClipboard('0x742d35Cc6634C0532925a3b844Bc57e4c6b1e29b', 'eth')"
+                                class="w-full text-sm font-semibold text-blue-600 hover:text-blue-700 py-2 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-smooth mb-3"
+                            >
+                                ${state.copyFeedback['eth'] ? '✓ Copied' : 'Copy Address'}
+                            </button>
+                            <div class="h-24 bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg mb-3 flex items-center justify-center">
+                                <span class="text-gray-400">QR Code</span>
+                            </div>
+                            <p class="text-xs text-center text-gray-600">Amount: 0.35 ETH</p>
+                        </div>
+
+                        <!-- USDT -->
+                        <div class="crypto-glow rounded-2xl glass-effect p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="font-bold text-gray-900">USDT</h3>
+                                <span class="text-2xl">₮</span>
+                            </div>
+                            <p class="text-xs text-gray-600 mb-4 font-mono text-center break-all">TK7C1Mj1DhKKahNaZCJCXR2Y1eVRQRkMT8</p>
+                            <button 
+                                onclick="copyToClipboard('TK7C1Mj1DhKKahNaZCJCXR2Y1eVRQRkMT8', 'usdt')"
+                                class="w-full text-sm font-semibold text-blue-600 hover:text-blue-700 py-2 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-smooth mb-3"
+                            >
+                                ${state.copyFeedback['usdt'] ? '✓ Copied' : 'Copy Address'}
+                            </button>
+                            <div class="h-24 bg-gradient-to-br from-green-100 to-blue-100 rounded-lg mb-3 flex items-center justify-center">
+                                <span class="text-gray-400">QR Code</span>
+                            </div>
+                            <p class="text-xs text-center text-gray-600">Amount: 1,500 USDT</p>
+                        </div>
+                    </div>
+
+                    <!-- Important Notice -->
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-8">
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0">
+                                <svg class="w-6 h-6 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-amber-900 mb-2">Important</h4>
+                                <ul class="text-sm text-amber-800 space-y-1">
+                                    <li>• Send the exact amount shown above</li>
+                                    <li>• Network fees must be paid separately</li>
+                                    <li>• This request expires in ${formatTime(state.timeLeft)}</li>
+                                    <li>• Do not send to other addresses</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sticky Summary -->
+                    <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 soft-shadow">
+                        <div class="max-w-2xl mx-auto px-4 py-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 mb-1">Payment Amount</p>
+                                    <p class="text-xl font-bold gradient-text">${formatCurrency(parseFloat(state.formData.amount) || 0)}</p>
+                                </div>
+                                <button 
+                                    onclick="handleBackToPaymentMethod()"
+                                    class="px-6 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-smooth font-semibold"
+                                >
+                                    Change Method
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="h-24"></div>
+                </div>
+            </div>
+
+            <style>
+                @keyframes rotate {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            </style>
+        `;
+
+        const BankPaymentPage = () => {
+            const account = generateVirtualAccount();
+            return `
+            <div class="min-h-screen flex items-center justify-center px-4 py-8">
+                <div class="w-full max-w-2xl fade-in">
+                    <!-- Header -->
+                    <div class="mb-8">
+                        <button 
+                            onclick="handleBackToPaymentMethod()"
+                            class="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 transition-smooth mb-6"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                            Back to Payment Methods
+                        </button>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">Bank Transfer Payment</h1>
+                        <p class="text-gray-600">Transfer funds to the account details below</p>
+                    </div>
+
+                    <!-- Timer & Status -->
+                    <div class="mb-8 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="relative w-12 h-12">
+                                <svg class="w-12 h-12" viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="12" r="11" stroke="#dbeafe" stroke-width="2"></circle>
+                                    <circle cx="12" cy="12" r="11" stroke="url(#gradient2)" stroke-width="2" stroke-dasharray="69.11" stroke-dashoffset="0" style="animation: rotate 2s linear infinite;"></circle>
+                                    <defs>
+                                        <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                            <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                <span class="absolute inset-0 flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                    </svg>
+                                </span>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-700">Awaiting Payment Confirmation</p>
+                                <p class="text-xs text-gray-500">Please complete the transfer</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-gray-500 mb-1">Time Remaining</p>
+                            <p class="text-2xl font-bold text-blue-600 timer">${formatTime(state.timeLeft)}</p>
+                        </div>
+                    </div>
+
+                    <!-- Account Details Card -->
+                    <div class="bank-glow rounded-2xl glass-effect p-8 mb-8">
+                        <div class="flex items-center gap-3 mb-8">
+                            <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h10m4 0a1 1 0 11-2 0m2 0a1 1 0 10-2 0m-4 0a1 1 0 11-2 0m2 0a1 1 0 10-2 0M3 21h18"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-600">Bank Account</p>
+                                <p class="font-bold text-gray-900">${account.bankName}</p>
+                            </div>
+                        </div>
+
+                        <!-- Account Details -->
+                        <div class="space-y-6">
+                            <!-- Account Name -->
+                            <div class="pb-6 border-b border-gray-200">
+                                <p class="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">Account Name</p>
+                                <div class="flex items-center justify-between">
+                                    <p class="text-lg font-bold text-gray-900">${account.accountName}</p>
+                                    <button 
+                                        onclick="copyToClipboard('${account.accountName}', 'accountName')"
+                                        class="text-sm font-semibold text-blue-600 hover:text-blue-700 py-1 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-smooth"
+                                    >
+                                        ${state.copyFeedback['accountName'] ? '✓' : '📋'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Account Number -->
+                            <div class="pb-6 border-b border-gray-200">
+                                <p class="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">Account Number</p>
+                                <div class="flex items-center justify-between">
+                                    <p class="text-lg font-mono font-bold text-gray-900">${account.accountNumber}</p>
+                                    <button 
+                                        onclick="copyToClipboard('${account.accountNumber}', 'accountNumber')"
+                                        class="text-sm font-semibold text-blue-600 hover:text-blue-700 py-1 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-smooth"
+                                    >
+                                        ${state.copyFeedback['accountNumber'] ? '✓' : '📋'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Amount -->
+                            <div>
+                                <p class="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">Amount to Transfer</p>
+                                <div class="flex items-center justify-between">
+                                    <p class="text-2xl font-bold gradient-text">${formatCurrency(parseFloat(account.amount) || 0)}</p>
+                                    <button 
+                                        onclick="copyToClipboard('${account.amount}', 'amount')"
+                                        class="text-sm font-semibold text-blue-600 hover:text-blue-700 py-1 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-smooth"
+                                    >
+                                        ${state.copyFeedback['amount'] ? '✓' : '📋'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Important Notice -->
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-6 mb-8">
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0">
+                                <svg class="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-red-900 mb-2">IMPORTANT</h4>
+                                <ul class="text-sm text-red-800 space-y-2">
+                                    <li>✓ Transfer the EXACT amount shown above</li>
+                                    <li>✓ Use the account details provided</li>
+                                    <li>✓ Request expires in ${formatTime(state.timeLeft)}</li>
+                                    <li>✓ Payment will be confirmed automatically</li>
+                                    <li>✓ Do NOT add any reference notes (optional)</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Instructions -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+                        <h4 class="font-semibold text-blue-900 mb-4">How to Complete Transfer</h4>
+                        <ol class="space-y-3 text-sm text-blue-800">
+                            <li class="flex gap-3">
+                                <span class="font-bold flex-shrink-0">1.</span>
+                                <span>Open your bank app or mobile banking</span>
+                            </li>
+                            <li class="flex gap-3">
+                                <span class="font-bold flex-shrink-0">2.</span>
+                                <span>Select "Send Money" or "Transfer Funds"</span>
+                            </li>
+                            <li class="flex gap-3">
+                                <span class="font-bold flex-shrink-0">3.</span>
+                                <span>Enter the account number and account name</span>
+                            </li>
+                            <li class="flex gap-3">
+                                <span class="font-bold flex-shrink-0">4.</span>
+                                <span>Enter the EXACT amount shown above</span>
+                            </li>
+                            <li class="flex gap-3">
+                                <span class="font-bold flex-shrink-0">5.</span>
+                                <span>Confirm and complete the transfer</span>
+                            </li>
+                        </ol>
+                    </div>
+
+                    <!-- Sticky Summary -->
+                    <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 soft-shadow">
+                        <div class="max-w-2xl mx-auto px-4 py-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 mb-1">Total Payment</p>
+                                    <p class="text-xl font-bold gradient-text">${formatCurrency(parseFloat(state.formData.amount) || 0)}</p>
+                                </div>
+                                <button 
+                                    onclick="handleBackToPaymentMethod()"
+                                    class="px-6 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-smooth font-semibold"
+                                >
+                                    Change Method
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="h-24"></div>
+                </div>
+            </div>
+
+            <style>
+                @keyframes rotate {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            </style>
+        `;
+        };
+
+        // Main Render Function
+        const render = () => {
+            const app = document.getElementById('app');
+            let content = '';
+
+            switch (state.currentPage) {
+                case 'deposit':
+                    content = DepositPage();
+                    break;
+                case 'payment-method':
+                    content = PaymentMethodPage();
+                    break;
+                case 'crypto':
+                    content = CryptoPaymentPage();
+                    break;
+                case 'bank':
+                    content = BankPaymentPage();
+                    break;
+            }
+
+            app.innerHTML = content;
+            feather.replace();
+        };
+
+        // Initial Render
+        render();
+    </script>
+</body>
+</html>
